@@ -322,7 +322,7 @@ class xRel
         }
 
         preg_match($titlePattern, $this->detailHTML, $title);
-        return $title[1];
+        return $this->convertToUTF8($title[1]);
     }
 
     protected function getOriginalTitle()
@@ -342,7 +342,7 @@ class xRel
         {
             $originaltitle = '';
         }
-        return $originaltitle;
+        return $this->convertToUTF8($originaltitle);
     }
 
     protected function getRuntime()
@@ -379,7 +379,7 @@ class xRel
 
         preg_match($fskPattern, $this->detailHTML, $fsk);
 
-        if (empty($fsk[1]))
+        if (empty($fsk[1]) AND $fsk[1] != 0)
         {
             $fsk = '';
         }
@@ -595,7 +595,7 @@ class xRel
                 switch ($this->subSectionVar)
                 {
                     case 'PC':
-                        $toFindForPregMatchPattern = '/Bewertung nicht verf�gbar\./';
+                        $toFindForPregMatchPattern = '/Bewertung nicht verfügbar\./';
                         break;
                     case 'Konsole':
                         $toFindForPregMatchPattern = '/Bisher stimmte niemand ab/';
@@ -610,13 +610,20 @@ class xRel
 
             preg_match_all($ratingPattern, $this->detailHTML, $rating);
 
-            $voices = str_replace('Stimmen', '', $rating[3][0]);
-            $voices = str_replace('Stimme', '', $voices);
-            $voices = trim($voices);
+            if(isset($rating[3][0]))
+            {
+                $voices = str_replace('Stimmen', '', $rating[3][0]);
+                $voices = str_replace('Stimme', '', $voices);
+                $voices = trim($voices);
 
-            $ratings['averangeRating'] = str_replace(',', '.', $rating[1][0]);
-            $ratings['scale'] = str_replace(',', '.', $rating[2][0]);
-            $ratings['voices'] = $voices;
+                $ratings['averangeRating'] = str_replace(',', '.', $rating[1][0]);
+                $ratings['scale'] = str_replace(',', '.', $rating[2][0]);
+                $ratings['voices'] = $voices;
+            }
+            else
+            {
+                $ratings = array();
+            }
 
         }
         else
@@ -952,6 +959,8 @@ class xRel
 
         $newTitle = str_ireplace("-", ".", $releaseTitle[1][$this->tempCount]);
 
+
+
         $releaseGroup = $this->getReleaseGroup();
 
         $newTitle = str_replace('.' . $releaseGroup, '-' . $releaseGroup, $newTitle);
@@ -1137,7 +1146,16 @@ class xRel
 
         preg_match_all($releaseNukedPattern, $this->releaseDetailHTML, $releaseNuked);
 
-        switch ($releaseNuked[1][0])
+        if(isset($releaseNuked[1][0]))
+        {
+            $status = $releaseNuked[1][0];
+        }
+        else
+        {
+            $status = 0;
+        }
+
+        switch ($status)
         {
             case 'Nein':
                 $nukedStatus = 0;
@@ -1208,13 +1226,16 @@ class xRel
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         $data = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
         if ($http_code == 301 || $http_code == 302)
         {
             list($header) = explode("\r\n\r\n", $data, 2);
+
             $matches = array();
-            preg_match('/(Location:|URI:)(.*?)\n/', $header, $matches);
-            $url = trim(array_pop($matches));
+            $url  = self::getRedirectUrl($header);
+
             $url_parsed = parse_url($url);
+
             if (isset($url_parsed))
             {
                 curl_setopt($ch, CURLOPT_URL, $url);
@@ -1222,13 +1243,34 @@ class xRel
                 return self::curl_redirect_exec($ch, $redirects);
             }
         }
+
         if ($curlopt_header)
+        {
             return $data;
+        }
         else
         {
-            list(, $body) = explode("\r\n\r\n", $data, 2);
+            list($tmp, $body) = explode("\r\n\r\n", $data, 2);
             return $body;
         }
+    }
+
+    protected static function getRedirectUrl($string)
+    {
+          $re1='.*?';	# Non-greedy match on filler
+          $re2='(Location)';	# Word 1
+          $re3='(:)';	# Any Single Character 1
+          $re4='( )';	# White Space 1
+          $re5='((?:http|https)(?::\\/{2}[\\w]+)(?:[\\/|\\.]?)(?:[^\\s"]*))';	# HTTP URL 1
+
+          if ($c=preg_match_all ("/".$re1.$re2.$re3.$re4.$re5."/is", $string, $matches))
+          {
+              $word1=$matches[1][0];
+              $c1=$matches[2][0];
+              $ws1=$matches[3][0];
+              $httpurl1=$matches[4][0];
+              return $httpurl1;
+          }
     }
 
     protected function convertToUTF8($toCheck)
@@ -1314,3 +1356,4 @@ class xRel
 }
 
 ?>
+
